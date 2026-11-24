@@ -374,6 +374,9 @@ class OnsetDetector {
   double _noise = 0.01;
   int _lastOnsetMs = -100000;
   double _levelMax = 0;
+  int _pendingMs = -1;
+  double _pendingThr = 1;
+  double _pendingPeak = 0;
   static const int refractoryMs = 80;
   static const int warmupMs = 800;
   static const double minAbs = 0.012;
@@ -409,9 +412,18 @@ class OnsetDetector {
       onLevel?.call(_levelMax);
       _levelMax = 0;
     }
-    if (ms > warmupMs && env > thr && ms - _lastOnsetMs > refractoryMs) {
+    // an onset is timed at its first loud millisecond, and rated by its peak over the next 10 ms
+    if (_pendingMs >= 0) {
+      if (env / _pendingThr > _pendingPeak) _pendingPeak = env / _pendingThr;
+      if (ms - _pendingMs >= 10) {
+        onOnset(_pendingMs / 1000.0, _pendingPeak);
+        _pendingMs = -1;
+      }
+    } else if (ms > warmupMs && env > thr && ms - _lastOnsetMs > refractoryMs) {
       _lastOnsetMs = ms;
-      onOnset(ms / 1000.0, level);
+      _pendingMs = ms;
+      _pendingThr = thr;
+      _pendingPeak = level;
     }
     // slowly follow the background noise, ignoring loud spikes
     final clipped = math.min(env, _noise * 3);
